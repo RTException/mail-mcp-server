@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Configuration status="WARN" moniterInterval="86400">
+    <!-- 定义常量 -->
+    <properties>
+        <property name="APP_NAME">mail-mcp-server</property>
+        <property name="LOG_HOME">${sys:user.home}/logs/${APP_NAME}</property>
+        <property name="LOG_APPENDER">@dyn.log.appender.all@</property>
+    </properties>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{yy-MM-dd,HH:mm:ss.SSS} [%-16t] %-5p %-22c{1} - %m%n" />
+        </Console>
+        <!-- 全日志文件输出 -->
+        <!-- Async Loggers will auto-flush in batches, so switch off immediateFlush. -->
+        <RollingRandomAccessFile name="AllRandomAccessFile" fileName="${LOG_HOME}/${APP_NAME}_all.log" immediateFlush="false" append="true"
+                                 filePattern="${LOG_HOME}/${APP_NAME}_all-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="%d{yy-MM-dd,HH:mm:ss.SSS} [%-16t] %-5p %-22c{1} - %m%n" />
+            <Policies>
+                <TimeBasedTriggeringPolicy/>
+                <SizeBasedTriggeringPolicy size="256 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="4" />
+        </RollingRandomAccessFile>
+    </Appenders>
+    <Loggers>
+        <AsyncRoot level="@dyn.log.level.all@" includeLocation="true">
+            <AppenderRef ref="${LOG_APPENDER}" />
+        </AsyncRoot>
+    </Loggers>
+</Configuration>

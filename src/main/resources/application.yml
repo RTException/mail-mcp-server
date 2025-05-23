@@ -1,0 +1,69 @@
+server:
+  port: @dyn.server.port@
+  error:
+    # 返回中包含错误消息
+    include-message: always
+    # 返回中包含异常类型
+    include-exception: false
+    # 返回中包含错误堆栈信息
+    include-stacktrace: never
+  servlet:
+    encoding:
+      charset: UTF-8
+      enable: true
+      force: true
+spring:
+  application:
+    name: mail-mcp-server
+  jackson:
+    default-property-inclusion: non_null
+  ai:
+    mcp:
+      server:
+        # mcp server的名称，在查询tools的接口中会返回给client
+        # 在多个server的情况下，准确的名称有利于大模型选中恰当的server
+        name: ${spring.application.name}
+        version: 1.0.0
+        # 支持SYNC/ASYNC
+        # SYNC：同步服务模式，默认值。专为简单`请求-响应`模式而设计
+        # ASYNC：异步服务模式。针对非阻塞作进行了优化。适合耗时长的复杂任务
+        type: SYNC
+        # Enable/disable stdio transport
+        # 开启后，将通过标准输入/输出进行通讯，通过进程间通信（IPC）实现，适合本地部署场景
+        stdio: false
+        # 调用initialize、notifications/initialized、tools/list、tools/call等接口的content-path
+        # 默认：/sse/message
+        sse-message-endpoint: /mcp/message
+        # `Created new SSE connection for sessions`接口的content-path
+        # 默认：/sse
+        sse-endpoint: /sse
+        # 资源更改通知
+        resource-change-notification: true
+        # 工具更改通知
+        tool-change-notification: true
+        # 提示词更改通知
+        prompt-change-notification: true
+  # 邮箱服务配置
+  mail:
+    default-encoding: UTF-8
+    host: @dyn.mail.host@
+    port: @dyn.mail.port@
+    username: @dyn.mail.username@
+    password: @dyn.mail.password@
+    protocol: smtp
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          starttls:
+            enable: true
+            required: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: 'service-registry, info, health'
+logging:
+  config: classpath:log4j2.xml
