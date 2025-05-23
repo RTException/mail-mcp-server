@@ -373,7 +373,23 @@ public class SendMailInput {
 ![`图10-2` `Agent调用mail-mcp-server`](images/mcp_send_mail_2.jpg)
 ![`图11` `mail-mcp-server邮件发送结果`](images/received_mail.jpg)
 
-## 4 常见问题
+## 4 快速启动
+- [完整项目源码](https://github.com/RTException/mail-mcp-server.git)
+
+- [快速启动包](https://github.com/RTException/mail-mcp-server/releases/download/1.0.0/mail-mcp-server.zip)
+
+将压缩包下载到本地后执行以下命令可快速启动
+```shell
+unzip mail-mcp-server.zip
+cd mail-mcp-server
+
+# 将配置文件中的邮箱服务配置修改为自己的邮件配置
+vi start_mail-mcp-server.sh
+
+sh start_mail-mcp-server.sh
+```
+
+## 5 常见问题
 
 - 1、本机容器启动的`Dify`连不上本机启动的`MCP Server`
 
@@ -438,7 +454,7 @@ public class SendMailInput {
   工具调用准确率，大参数模型优于小参数模型，思考模型优于不思考模型。在工具数量达到一定数量时，调用成功率也会下降。
   恰当的提示词能够提高调用成功率。
 
-## 5 推荐网站
+## 6 推荐网站
 
 - 1、[快速组织依赖的网站](https://start.spring.io/)
 - 2、[各种编程语言的`MCP SDK`](https://modelcontextprotocol.io/introduction) （`spring-ai-mcp`依赖了该项目的[`java sdk`](https://github.com/modelcontextprotocol/java-sdk)）
