@@ -192,7 +192,7 @@ spring:
             required: true
 ```
 
-- 4、创建并编写`MCP Server`的业务逻辑
+- 4、创建并编写`MCP Server`的业务逻辑（通过姓名查找收件地址、发送邮件）
 
 `@Tool`注解是`Spring AI MCP`框架中用于快速暴露业务能力为`MCP协议工具`的核心注解，该注解将`Service方法`自动映射成`MCP协议工具`，并且通过注解的属性`description`对工具进行描述。
 
@@ -204,6 +204,8 @@ spring:
 package com.zsd.mcp.mail.impl;
 
 import com.zsd.mcp.mail.MailService;
+import com.zsd.mcp.mail.api.FindContactInput;
+import com.zsd.mcp.mail.api.FindContactOutput;
 import com.zsd.mcp.mail.api.SendMailInput;
 import com.zsd.mcp.mail.api.SendMailOutput;
 import lombok.extern.slf4j.Slf4j;
@@ -215,6 +217,11 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * @author zhangshdiong
  * @date 2025/5/9 10:46
@@ -224,38 +231,81 @@ import org.springframework.stereotype.Service;
 @Service
 public class MailServiceImpl implements MailService {
 
-    @Value("${spring.mail.username}")
-    private String from;
+  /**模拟数据*/
+  private static final Map<String, String> contacts = new HashMap<>();
 
-    @Autowired
-    private JavaMailSender mailSender;
+  static {
+    contacts.put("何龙", "helong@tf.cn");
+    contacts.put("刘显波", "liuxianbo@tf.cn");
+    contacts.put("张仕东", "zhangshidong@tf.cn");
+    contacts.put("杨帆", "yangfan@tf.cn");
+    contacts.put("涂太松", "tutaisong@tf.cn");
+    contacts.put("谭伟", "tanwei@tf.cn");
+    contacts.put("张沛", "zhangpei1@tf.cn");
+    contacts.put("段龙", "duanlong@tf.cn");
+    contacts.put("赖健", "laijian@tf.cn");
+    contacts.put("邱季", "qiuji@tf.cn");
+    contacts.put("蔡玉成", "caiyucheng@tf.cn");
+  }
 
-    @Tool(description = "Create and send a new email message.")
-    @Override
-    public SendMailOutput sendMail(@ToolParam(description = "发送邮件的请求参数") SendMailInput input) {
-        log.info("====收到 MCP 调用请求：{}", input);
-        SimpleMailMessage simpleMailMessage = new SimpleMailMessage();
-        simpleMailMessage.setFrom(from);
-        simpleMailMessage.setTo(input.getTo());
-        simpleMailMessage.setSubject(input.getSubject());
-        simpleMailMessage.setText(input.getBody());
-        try{
-            mailSender.send(simpleMailMessage);
-        }catch (Exception e){
-            log.error("send mail failed:", e);
-            throw e;
-        }
-        return SendMailOutput.builder()
-                .resultCode("00")
-                .resultMsg("发送成功")
-                .build();
+  @Value("${spring.mail.username}")
+  private String from;
+
+  @Autowired
+  private JavaMailSender mailSender;
+
+  @Tool(description = "Create and send a new email message.")
+  @Override
+  public SendMailOutput sendMail(@ToolParam(description = "发送邮件的请求参数") SendMailInput input) {
+    log.info("====收到 MCP.sendMail 调用请求：{}", input);
+    SimpleMailMessage simpleMailMessage = new SimpleMailMessage();
+    simpleMailMessage.setFrom(from);
+    simpleMailMessage.setTo(input.getTo());
+    simpleMailMessage.setCc();
+    simpleMailMessage.setSubject(input.getSubject());
+    simpleMailMessage.setText(input.getBody());
+    try{
+      mailSender.send(simpleMailMessage);
+    }catch (Exception e){
+      log.error("send mail failed:", e);
+      throw e;
     }
+    return SendMailOutput.builder()
+            .resultCode("00")
+            .resultMsg("发送成功")
+            .build();
+  }
+
+  @Tool(description = "根据联系人姓名查找对应的邮件地址")
+  @Override
+  public FindContactOutput findContact(@ToolParam(description = "查找联系人请求参数") FindContactInput input){
+    log.info("===收到 MCP.findContact 调用请求:{}", input);
+    for (Map.Entry<String, String> contact : contacts.entrySet()){
+      //模糊匹配
+      Pattern contactPattern = Pattern.compile(".*" + input.getName() + ".*");
+      Matcher matcher = contactPattern.matcher(contact.getKey());
+      if(matcher.matches()){
+        return FindContactOutput.builder()
+                .name(contact.getKey())
+                .email(contact.getValue())
+                .resultCode("00")
+                .resultMsg("查找成功")
+                .build();
+      }
+    }
+    return FindContactOutput.builder()
+            .resultCode("01")
+            .resultMsg("未找到该联系人")
+            .build();
+  }
 }
 ```
 
 ```java
 package com.zsd.mcp.mail;
 
+import com.zsd.mcp.mail.api.FindContactInput;
+import com.zsd.mcp.mail.api.FindContactOutput;
 import com.zsd.mcp.mail.api.SendMailInput;
 import com.zsd.mcp.mail.api.SendMailOutput;
 
@@ -266,12 +316,19 @@ import com.zsd.mcp.mail.api.SendMailOutput;
  **/
 public interface MailService {
 
-    /**
-     * 发送电子邮件
-     * @param input 请求
-     * @return 相应
-     */
-    SendMailOutput sendMail(SendMailInput input);
+  /**
+   * 发送电子邮件
+   * @param input 请求
+   * @return 响应
+   */
+  SendMailOutput sendMail(SendMailInput input);
+
+  /**
+   * 通过姓名查找收邮件地址
+   * @param input 请求
+   * @return 响应
+   */
+  FindContactOutput findContact(FindContactInput input);
 
 }
 ```
@@ -326,10 +383,97 @@ public class SendMailInput {
 ```
 
 #### 3.1.3 Client调用
-除了使用`Spring AI`构建一个`MCP Client`外，现在很多智能应用平台都支持MCP调用，如：`Dify`、`Cursor`、`COZE`等，我这里使用`Dify`来调用
 
-`Spring AI`构建`MCP Client`戳这里：[Spring AI构建MCP Client](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html)
+##### 3.1.3.1 `Spring AI`构建`MCP Client`
 
+`Spring AI`构建`MCP Client`[官方示例](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html)
+- 1、`pom.xml`中添加依赖
+
+```xml
+<parent>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-parent</artifactId>
+  <version>3.4.5</version>
+  <relativePath /> <!-- lookup parent from repository -->
+</parent>
+
+<groupId>com.zhangsd</groupId>
+<artifactId>mail-mcp-client</artifactId>
+<version>1.0-SNAPSHOT</version>
+
+<properties>
+  <maven.compiler.source>21</maven.compiler.source>
+  <maven.compiler.target>21</maven.compiler.target>
+  <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+</properties>
+
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-bom</artifactId>
+      <version>1.0.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-mcp-client</artifactId>
+    <exclusions>
+      <exclusion>
+        <artifactId>spring-boot-starter-logging</artifactId>
+        <groupId>org.springframework.boot</groupId>
+      </exclusion>
+    </exclusions>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-openai</artifactId>
+  </dependency>
+  <!-- 日志依赖 -->
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-log4j2</artifactId>
+  </dependency>
+</dependencies>
+```
+- 2、创建启动入口
+
+```java
+package com.zhangsd;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+import java.util.Scanner;
+
+@SpringBootApplication
+public class McpClientApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(McpClientApplication.class, args);
+    }
+}
+```
+
+- 3、在`application.yml`中添加配置
+
+```yaml
+
+```
+
+- 4、在创建为`ChatClient`添加可用工具
+
+```java
+ 
+```
+
+
+##### 3.1.3.2 `Dify MCP SSE 插件`
+除了使用`Spring AI`构建一个`MCP Client`外，现在很多智能应用平台都支持MCP调用，如：`Dify`、`Cursor`、`COZE`等，我这里使用`Dify`
 - 1、下载`MCP SSE`插件
 
 在`Dify`的插件市场搜索`MCP SSE`关键字，选中对应的插件并点击安装，如下`图7`
