@@ -16,7 +16,7 @@
 ### 2.1 提示词工程
 我们来尝试一个简单的场景，如下`图2`，让大模型告诉我们`今天是星期几？`
 ![`图2` `没有工具调用时大模型的表现`](images/no_tool_call.jpg)
-大模型相当于一个脱机的、静态的大量知识的快照，它并不知道当前时间，也不知道外面世界发生的变化。
+大模型相当于一个脱机的、静态的智者，它并不知道当前时间，也不知道外面世界发生的变化。
 在没有工具调用的情况下，大模型不能回答`今天是星期几？`这样的问题。
 
 所以我们需要在提示词中提供我们的线索，比如这样问：`2025年5月20日是星期几？`，如下`图3`
@@ -27,7 +27,8 @@
 ![`图4` `为Agent添加时间工具后`](images/with_tool_call.jpg)
 这样我们就不用每次都把今天的日期输给大模型了，他自己去查，提升了自动化水平，显著提高用户体验。
 
-PS：现在的企业知识库（RAG）跟这个原理上是一样的，都是提示词工程。
+`MCP`是将外部服务、数据与大模型结合的一种协议标准，有了`MCP`就能让大模型获取私域知识、完成特定指令的执行更加便捷。
+我相信各大模型都会在后续的版本中强化`MCP`以提高调用的准确率
 
 ### 2.2 标准化
 `OpenAI`、`Google`、`Qwen`、`DeepSeek`等各大模型都支持（`function/tool call`），但是在各LLM平台上，`function call API`
@@ -41,10 +42,9 @@ MCP由三个核心组件构成：`Host`、`Client`、`Server`。如下`图5`
 - Server：被`Client`调用的服务端。负责执行实际的指令，比如：查询数据库并返回对应的数据、调用邮箱的接口发送一份邮件、访问服务器文件系统并返回文件列表等。
   ![`图5` `MCP三个核心组件`](images/mcp_host_client_server.png)
 
-MCP调用过程如下`图6`
-![`图6` `MCP调用过程`](images/mcp_invoke.jpeg)
-
-
+MCP调用过程如下`图6-1`、`图6-2`
+![`图6-1` `MCP调用过程`](images/mcp_invoke.jpeg)
+![`图6-2` `MCP调用过程`](images/mcp-process.jpg)
 
 ## 3 构建MCP Sever
 
@@ -462,15 +462,140 @@ public class McpClientApplication {
 - 3、在`application.yml`中添加配置
 
 ```yaml
-
+spring:
+  main:
+    web-application-type: none
+  application:
+    name: mail-mcp-client
+  jackson:
+    default-property-inclusion: non_null
+  ai:
+    model:
+      chat: openai
+    openai:
+      base-url: @dyn.openai.base-url@
+      api-key: @dyn.openai.api-key@
+      chat:
+        completions-path: /chat/completions
+        options:
+          # chat默认使用的模型名
+          # Qwen/Qwen3-235B-A22B, deepseek-ai/DeepSeek-R1, deepseek-ai/DeepSeek-V3
+          model: 'deepseek-ai/DeepSeek-V3'
+    mcp:
+      client:
+        # 是否开启MCP Client，默认 true
+        enabled: true
+        # MCP客户端实例名
+        name: mail-assistant
+        # 版本号
+        version: 1.0.0
+        # 是否在创建时初始化客户端，默认 true
+        initialized: true
+        # 请求的超时时间，默认20s
+        request-timeout: 20s
+        # 客户端类型（SYNC/ASYNC）
+        type: SYNC
+        sse:
+          connections:
+            mail-mcp-server:
+              url: http://127.0.0.1:9088
 ```
 
-- 4、在创建为`ChatClient`添加可用工具
+- 4、创建`ChatClient`并添加可用工具
 
 ```java
- 
+ package com.zhangsd.mcp.client;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
+
+/**
+ * @author zhangshdiong
+ * @date 2025/5/28 17:28
+ * @description 邮件MCP客户端
+ **/
+@Component
+public class MailClient {
+
+  private final ChatClient chatClient;
+
+  public MailClient(ChatClient.Builder chatClientBuilder, ToolCallbackProvider toolCallbackProvider){
+    //创建会话记忆窗口，最大10轮
+    ChatMemory chatMemory = MessageWindowChatMemory.builder().maxMessages(10).build();
+    //创建与大模型的交互客户端
+    this.chatClient = chatClientBuilder.defaultSystem("""
+                    你是一个聪明的邮件助手，根据用户指令发送电子邮件，步骤如下：
+                    1、先获取工具列表，找到需要的工具和对应的参数，所有的工具调用都要基于事实，不要猜测，不要假设；
+                    2、根据用户的要求生成合理的邮件内容，根据邮件内容生成合适的邮件主题；邮件内容需要包含称呼、问候语、正文、祝福语；发件人是四川天府银行科技部的张仕东；
+                    3、如果用户没有明确给出收件地址，而是姓名，请调用工具查找联系人的邮件地址；如果未查找到联系人，请提示用户提供准确的姓名或直接给出邮件地址；
+                    4、在发送前请向用户确认即将发送的邮件标题、内容、收件地址等信息，得到用户肯定确认后调用对应的工具发送邮件；
+                    5、在调用工具时，如果缺失参数请向用户询问，直到收集完全部的调用参数后调用工具完成发送，并将发送结果反馈给用户。""")
+            .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build()) //添加会话记忆
+            .defaultToolCallbacks(toolCallbackProvider) //添加工具列表
+            .build();
+  }
+
+  /**
+   * 发送邮件
+   * @param command 用户指令
+   * @return 运行结果
+   */
+  public Flux<String> sendMail(String command){
+    return chatClient.prompt(command)
+            .stream()
+            .content();
+  }
+}
 ```
 
+- 5、创建一个用户的交互接口，这里使用命令行交互
+
+```java
+    /**
+     * 创建一个命令行用户交互
+     * @param mailClient 邮件智能体
+     * @return 命令行输出
+     */
+    @Bean
+    CommandLineRunner cli(MailClient mailClient){
+        return args -> {
+            var scanner = new Scanner(System.in);
+            System.out.println("Agent: 我是一个非常聪明的邮件助手，能够帮您编辑并发送邮件。");
+            while (true){
+                System.out.print("User: ");
+                //采集用户输入
+                String userCommand = scanner.nextLine();
+                if(StringUtils.isBlank(userCommand)){
+                    System.out.println("System: 请输入您的指令");
+                    continue;
+                }
+                if(StringUtils.containsAny(userCommand, "exit", "退出")){
+                    break;
+                }
+                //向智能体发送用户指令
+                Flux<String> sendResponse = mailClient.sendMail(userCommand);
+                System.out.print("Agent: ");
+                //大模型返回的流式输出
+                sendResponse
+                        .doOnNext(System.out::print)
+                        .blockLast();
+                System.out.println();
+            }
+        };
+    }
+```
+- 6、运行效果
+
+![`spring-ai-mcp-client`运行效果](images/spring-ai-mcp-client.jpg)
+
+PS：
+目前，原生的`Spring AI`暂不支持将非`DeepSeek`模型的推理过程流式输出，issue上已经有人提了适配Qwen3，个人推测在后续版本中应该会支持推理类模型而不止特定的推理模型。
+同时也不支持将工具调用过程在返回中输出，官网上说将在后续版本中增加这个支持。
 
 ##### 3.1.3.2 `Dify MCP SSE 插件`
 除了使用`Spring AI`构建一个`MCP Client`外，现在很多智能应用平台都支持MCP调用，如：`Dify`、`Cursor`、`COZE`等，我这里使用`Dify`
