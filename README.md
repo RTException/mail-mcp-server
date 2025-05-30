@@ -524,6 +524,11 @@ public class MailClient {
 
   private final ChatClient chatClient;
 
+  /**
+   * 构造方法
+   * @param chatClientBuilder spring ai根据yml中的spring.ai.model配置自动装配的对话客户端builder
+   * @param toolCallbackProvider spring ai根据yml中的spring.ai.mcp.client.sse.connections配置自动装配的mcp工具provider
+   */
   public MailClient(ChatClient.Builder chatClientBuilder, ToolCallbackProvider toolCallbackProvider){
     //创建会话记忆窗口，最大10轮
     ChatMemory chatMemory = MessageWindowChatMemory.builder().maxMessages(10).build();
@@ -643,19 +648,33 @@ PS：
 ![`图11` `mail-mcp-server邮件发送结果`](images/received_mail.jpg)
 
 ## 4 快速启动
-- [完整项目源码](https://github.com/RTException/mail-mcp-server.git)
 
-- [快速启动包](https://github.com/RTException/mail-mcp-server/releases/download/1.0.0/mail-mcp-server.zip)
+完整项目源码
+- [mail-mcp-server](https://github.com/RTException/mail-mcp-server.git)
+- [mail-mcp-client](https://github.com/RTException/mail-mcp-client.git)
+
+- [快速启动包](https://github.com/RTException/mail-mcp-server/releases/download/1.0.0/mail-mcp.zip)
 
 将压缩包下载到本地后执行以下命令可快速启动
-```shell
-unzip mail-mcp-server.zip
-cd mail-mcp-server
 
+```shell
+unzip mail-mcp.zip
+cd mail-mcp
+
+# =====启动 mcp server=====
 # 将配置文件中的邮箱服务配置修改为自己的邮件配置
 vi start_mail-mcp-server.sh
 
 sh start_mail-mcp-server.sh
+# =========================
+
+# =====启动 mcp client=====
+# 将配置文件中的大模型配置修改为自己的
+vi start_mail-mcp-client.sh
+
+sh start_mail-mcp-client.sh
+# =========================
+
 ```
 
 ## 5 常见问题
